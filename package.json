@@ -2,7 +2,7 @@
   "name": "oi-monitor",
   "version": "1.0.0",
   "description": "OI Monitor - Coinglass + Binance Dashboard with TG Alerts",
-  "engines": { "node": "18.x" },
+  "engines": { "node": "24.x" },
   "dependencies": {
     "node-fetch": "^3.3.2"
   }
