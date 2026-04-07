@@ -1,6 +1,3 @@
-// api/alert.js — Send Telegram notifications
-// Called by the frontend when alert conditions are met
-
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
