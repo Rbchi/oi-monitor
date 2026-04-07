@@ -13,18 +13,15 @@ async function fetchCGOI(symbol, apiKey) {
     });
     if (!res.ok) return null;
     const json = await res.json();
-    if (!json.data) return null;
-    let totalOiUsd = 0, weightedFR = 0, frWeight = 0, price = 0;
-    for (const ex of json.data) {
-      const oiUsd = parseFloat(ex.oiUsd || 0);
-      totalOiUsd += oiUsd;
-      if (ex.price) price = parseFloat(ex.price);
-      if (ex.fundingRate !== undefined) {
-        weightedFR += parseFloat(ex.fundingRate) * oiUsd;
-        frWeight += oiUsd;
-      }
-    }
-    return { symbol, price, oiUsd: totalOiUsd, fundingRate: frWeight > 0 ? weightedFR / frWeight : 0 };
+    if (!json.data || !Array.isArray(json.data) || json.data.length === 0) return null;
+
+    const d = json.data[0];
+    return {
+      symbol,
+      price: parseFloat(d.price || 0),
+      oiUsd: parseFloat(d.openInterest || 0),
+      fundingRate: parseFloat(d.avgFundingRateBySymbol || 0)
+    };
   } catch { return null; }
 }
 
@@ -37,7 +34,10 @@ async function fetchCGOIHistory(symbol, apiKey) {
     if (!res.ok) return [];
     const json = await res.json();
     if (!json.data) return [];
-    return json.data.map(d => ({ ts: d.t, oiUsd: parseFloat(d.o || d.oiUsd || 0) })).reverse();
+    const list = json.data.dateList
+      ? json.data.dateList.map((t, i) => ({ ts: t, oiUsd: parseFloat(json.data.dataMap?.all?.[i] || 0) }))
+      : json.data.map(d => ({ ts: d.t || d.time, oiUsd: parseFloat(d.o || d.openInterest || d.oiUsd || 0) }));
+    return list.reverse();
   } catch { return []; }
 }
 
