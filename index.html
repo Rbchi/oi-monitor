@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OI Monitor — 合約監控系統</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0a0c0f;
+  --bg2: #10141a;
+  --bg3: #161c26;
+  --bg4: #1d2535;
+  --border: rgba(255,255,255,0.07);
+  --border2: rgba(255,255,255,0.12);
+  --text: #e8edf5;
+  --muted: #64748b;
+  --muted2: #94a3b8;
+  --green: #22c55e;
+  --green-dim: rgba(34,197,94,0.12);
+  --red: #ef4444;
+  --red-dim: rgba(239,68,68,0.12);
+  --amber: #f59e0b;
+  --amber-dim: rgba(245,158,11,0.12);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59,130,246,0.12);
+  --cyan: #06b6d4;
+  --accent: #3b82f6;
+  --font-mono: 'IBM Plex Mono', monospace;
+  --font-sans: 'IBM Plex Sans', sans-serif;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { background: var(--bg); }
+body { font-family: var(--font-sans); color: var(--text); background: var(--bg); min-height: 100vh; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ── Layout ── */
+.app { display: grid; grid-template-rows: auto 1fr; min-height: 100vh; }
+.header { border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; gap: 16px; position: sticky; top: 0; z-index: 100; background: var(--bg); backdrop-filter: blur(8px); }
+.logo { font-family: var(--font-mono); font-size: 13px; font-weight: 600; color: var(--text); letter-spacing: 0.05em; display: flex; align-items: center; gap: 8px; }
+.logo-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+.header-sep { flex: 1; }
+.status-bar { font-family: var(--font-mono); font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 12px; }
+.status-bar .live { color: var(--green); }
+
+.main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+.sidebar { border-right: 1px solid var(--border); padding: 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.content { overflow: hidden; display: flex; flex-direction: column; }
+
+/* ── Sidebar Sections ── */
+.section-label { font-family: var(--font-mono); font-size: 10px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; margin-bottom: 8px; }
+.setting-group { display: flex; flex-direction: column; gap: 8px; }
+.setting-row { display: flex; flex-direction: column; gap: 4px; }
+.setting-label { font-size: 11px; color: var(--muted2); }
+
+input[type=text], input[type=number], textarea, select {
+  background: var(--bg3); border: 1px solid var(--border2); color: var(--text);
+  font-family: var(--font-mono); font-size: 11px; padding: 7px 10px;
+  border-radius: 4px; width: 100%; outline: none; transition: border-color 0.15s;
+}
+input:focus, textarea:focus, select:focus { border-color: var(--accent); }
+textarea { resize: vertical; min-height: 60px; font-size: 11px; }
+
+.btn { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 12px; border-radius: 4px; font-size: 12px; font-family: var(--font-sans); font-weight: 500; cursor: pointer; border: 1px solid var(--border2); background: var(--bg3); color: var(--text); transition: all 0.15s; width: 100%; }
+.btn:hover { background: var(--bg4); border-color: var(--accent); color: var(--accent); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn.primary:hover { background: #2563eb; }
+.btn.danger { background: var(--red-dim); border-color: var(--red); color: var(--red); }
+.btn.small { padding: 4px 8px; font-size: 11px; width: auto; }
+
+.divider { border: none; border-top: 1px solid var(--border); }
+
+/* ── Alert Config ── */
+.alert-rule { background: var(--bg3); border: 1px solid var(--border); border-radius: 6px; padding: 10px; }
+.alert-rule-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.alert-rule-name { font-size: 11px; font-weight: 500; color: var(--text); }
+.toggle { position: relative; width: 28px; height: 16px; }
+.toggle input { display: none; }
+.toggle-slider { position: absolute; inset: 0; background: var(--bg4); border-radius: 8px; cursor: pointer; transition: 0.2s; border: 1px solid var(--border2); }
+.toggle input:checked + .toggle-slider { background: var(--accent); }
+.toggle-slider::after { content: ''; position: absolute; width: 10px; height: 10px; background: #fff; border-radius: 50%; top: 2px; left: 2px; transition: 0.2s; }
+.toggle input:checked + .toggle-slider::after { transform: translateX(12px); }
+.threshold-row { display: flex; align-items: center; gap: 6px; }
+.threshold-row input { flex: 1; }
+.threshold-unit { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* ── Top bar (content area) ── */
+.content-topbar { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; }
+.tab-group { display: flex; gap: 2px; background: var(--bg3); border-radius: 5px; padding: 2px; border: 1px solid var(--border); }
+.tab { font-family: var(--font-mono); font-size: 11px; padding: 4px 12px; border-radius: 3px; cursor: pointer; color: var(--muted2); transition: all 0.15s; background: transparent; border: none; }
+.tab.active { background: var(--bg4); color: var(--text); }
+.sort-select { font-family: var(--font-mono); font-size: 11px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.filter-input { font-family: var(--font-mono); font-size: 11px; background: var(--bg3); border: 1px solid var(--border2); color: var(--text); padding: 4px 10px; border-radius: 4px; width: 120px; }
+.refresh-info { font-family: var(--font-mono); font-size: 10px; color: var(--muted); margin-left: auto; }
+.progress-bar { width: 60px; height: 2px; background: var(--bg4); border-radius: 1px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--accent); border-radius: 1px; transition: width 1s linear; }
+
+/* ── Summary Stats ── */
+.stat-strip { display: grid; grid-template-columns: repeat(5,1fr); gap: 1px; background: var(--border); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.stat-item { background: var(--bg); padding: 10px 14px; }
+.stat-key { font-family: var(--font-mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 3px; }
+.stat-val { font-family: var(--font-mono); font-size: 16px; font-weight: 600; }
+.stat-sub { font-family: var(--font-mono); font-size: 9px; color: var(--muted); margin-top: 1px; }
+
+/* ── Alert Feed ── */
+.alert-feed { max-height: 80px; overflow-y: auto; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.alert-item { display: flex; align-items: center; gap: 10px; padding: 7px 16px; border-bottom: 1px solid var(--border); font-size: 11px; animation: slideIn 0.3s ease; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+.alert-icon { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.alert-time { font-family: var(--font-mono); font-size: 10px; color: var(--muted); white-space: nowrap; }
+.alert-msg { color: var(--muted2); }
+.alert-sym { font-weight: 600; color: var(--text); }
+.alert-val { font-family: var(--font-mono); font-weight: 600; }
+
+/* ── Table ── */
+.table-wrap { flex: 1; overflow: auto; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead { position: sticky; top: 0; z-index: 10; background: var(--bg); }
+th { padding: 8px 12px; text-align: left; font-family: var(--font-mono); font-size: 9px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; border-bottom: 1px solid var(--border); font-weight: 400; white-space: nowrap; cursor: pointer; user-select: none; }
+th:hover { color: var(--muted2); }
+th.r { text-align: right; }
+th.sorted { color: var(--accent); }
+th.sorted::after { content: ' ↓'; }
+th.sorted.asc::after { content: ' ↑'; }
+
+td { padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+td.r { text-align: right; }
+tr { transition: background 0.1s; }
+tr:hover { background: var(--bg2); }
+tr.alert-row { background: rgba(245,158,11,0.04); }
+
+.sym-cell { display: flex; align-items: center; gap: 8px; }
+.sym-text { font-family: var(--font-mono); font-weight: 600; font-size: 12px; }
+.cg-badge { font-size: 8px; background: var(--blue-dim); color: var(--blue); border-radius: 2px; padding: 1px 4px; font-family: var(--font-mono); }
+
+.chg { font-family: var(--font-mono); font-size: 11px; font-weight: 600; padding: 2px 6px; border-radius: 3px; display: inline-block; }
+.chg.up { color: var(--green); background: var(--green-dim); }
+.chg.dn { color: var(--red); background: var(--red-dim); }
+.chg.flat { color: var(--muted); }
+
+.fr { font-family: var(--font-mono); font-size: 11px; font-weight: 500; }
+.fr.pos { color: var(--green); }
+.fr.neg { color: var(--red); }
+.fr.extreme { animation: blink 1s infinite; }
+@keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.price-cell { font-family: var(--font-mono); font-size: 12px; }
+.oi-cell { font-family: var(--font-mono); font-size: 12px; }
+
+/* Sparkline */
+.spark-cell { width: 80px; }
+canvas.spark { display: block; }
+
+/* Divergence indicator */
+.div-badge { font-size: 9px; padding: 2px 5px; border-radius: 2px; font-family: var(--font-mono); }
+.div-bull { background: var(--green-dim); color: var(--green); }
+.div-bear { background: var(--red-dim); color: var(--red); }
+
+/* ── Modal (Settings) ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+.modal-overlay.open { opacity: 1; pointer-events: all; }
+.modal { background: var(--bg2); border: 1px solid var(--border2); border-radius: 8px; width: 420px; max-width: 95vw; max-height: 80vh; overflow-y: auto; padding: 20px; }
+.modal h2 { font-size: 14px; font-weight: 600; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+
+/* ── Empty/Loading state ── */
+.loading-row td { text-align: center; padding: 40px; color: var(--muted); font-family: var(--font-mono); font-size: 12px; }
+
+/* ── TG test result ── */
+.test-result { font-size: 11px; padding: 6px 10px; border-radius: 4px; margin-top: 6px; font-family: var(--font-mono); }
+.test-result.ok { background: var(--green-dim); color: var(--green); }
+.test-result.err { background: var(--red-dim); color: var(--red); }
+
+/* ── Column widths ── */
+col.c-rank  { width: 36px; }
+col.c-sym   { width: 110px; }
+col.c-price { width: 100px; }
+col.c-oi    { width: 110px; }
+col.c-5m    { width: 80px; }
+col.c-30m   { width: 80px; }
+col.c-1h    { width: 80px; }
+col.c-fr    { width: 90px; }
+col.c-div   { width: 70px; }
+col.c-spark { width: 90px; }
+
+@media (max-width: 900px) {
+  .main { grid-template-columns: 1fr; }
+  .sidebar { display: none; }
+  .stat-strip { grid-template-columns: repeat(3,1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">
+      <span class="logo-dot"></span>
+      OI·MONITOR
+    </div>
+    <div class="status-bar">
+      <span id="statusText" class="live">● LIVE</span>
+      <span id="fetchedAt">—</span>
+    </div>
+    <div class="header-sep"></div>
+    <button class="btn small" onclick="openSettings()">⚙ 設定</button>
+  </header>
+
+  <div class="main">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+
+      <div>
+        <div class="section-label">資料來源</div>
+        <div class="setting-group">
+          <div class="setting-row">
+            <div class="setting-label">Coinglass API Key</div>
+            <input type="text" id="cgKey" placeholder="貼上 API Key（選填）" value="">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">監控幣種（逗號分隔）</div>
+            <textarea id="symbolsInput">BTC,ETH,SOL,BNB,ARB,DOGE,SUI,AVAX,LDO,OP,INJ,TIA,JUP,WLD,PENDLE,ONDO,SEI,APT,NEAR,FTM,ATOM,LINK,UNI,AAVE,1000PEPE,WIF</textarea>
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">刷新間隔（秒）</div>
+            <input type="number" id="refreshInterval" value="60" min="30" max="300">
+          </div>
+          <button class="btn primary" onclick="startFetch()">▶ 開始監控</button>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div>
+        <div class="section-label">Telegram 通知</div>
+        <div class="setting-group">
+          <div class="setting-row">
+            <div class="setting-label">Bot Token</div>
+            <input type="text" id="tgToken" placeholder="123456789:AAA...">
+          </div>
+          <div class="setting-row">
+            <div class="setting-label">Chat ID</div>
+            <input type="text" id="tgChatId" placeholder="-100xxxxxxxxx">
+          </div>
+          <button class="btn" onclick="testTelegram()">✈ 測試發送</button>
+          <div id="tgTestResult"></div>
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div>
+        <div class="section-label">警報規則</div>
+        <div class="setting-group">
+
+          <div class="alert-rule">
+            <div class="alert-rule-header">
+              <span class="alert-rule-name">OI 5分鐘暴變</span>
+              <label class="toggle"><input type="checkbox" id="rule5m" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="threshold-row">
+              <input type="number" id="thresh5m" value="2" step="0.5" min="0.5" style="width:60px">
+              <span class="threshold-unit">% 觸發</span>
+            </div>
+          </div>
+
+          <div class="alert-rule">
+            <div class="alert-rule-header">
+              <span class="alert-rule-name">OI 1小時累積</span>
+              <label class="toggle"><input type="checkbox" id="rule1h" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="threshold-row">
+              <input type="number" id="thresh1h" value="5" step="1" min="1" style="width:60px">
+              <span class="threshold-unit">% 觸發</span>
+            </div>
+          </div>
+
+          <div class="alert-rule">
+            <div class="alert-rule-header">
+              <span class="alert-rule-name">資金費率極端</span>
+              <label class="toggle"><input type="checkbox" id="ruleFR" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div class="threshold-row">
+              <input type="number" id="threshFR" value="0.05" step="0.01" min="0.01" style="width:60px">
+              <span class="threshold-unit">% 觸發</span>
+            </div>
+          </div>
+
+          <div class="alert-rule">
+            <div class="alert-rule-header">
+              <span class="alert-rule-name">OI/價格背離</span>
+              <label class="toggle"><input type="checkbox" id="ruleDivergence" checked><span class="toggle-slider"></span></label>
+            </div>
+            <div style="font-size:10px;color:var(--muted);margin-top:4px;">OI 1H ↑ 但價格 ↓（或反向）</div>
+          </div>
+
+        </div>
+      </div>
+
+      <hr class="divider">
+
+      <div style="font-size:10px;color:var(--muted);line-height:1.6;">
+        ℹ 資料來源：Binance Futures（免費），Coinglass（需 Key）<br>
+        OI 歷史計算：5m period，13 根 K 棒<br>
+        背離 = OI 1H 變化方向與價格 1H 反向
+      </div>
+
+    </aside>
+
+    <!-- Main content -->
+    <div class="content">
+
+      <!-- Topbar -->
+      <div class="content-topbar">
+        <div class="tab-group">
+          <button class="tab active" data-sort-tf="all" onclick="setTimeFocus('all',this)">全部</button>
+          <button class="tab" data-sort-tf="5m" onclick="setTimeFocus('5m',this)">5M</button>
+          <button class="tab" data-sort-tf="30m" onclick="setTimeFocus('30m',this)">30M</button>
+          <button class="tab" data-sort-tf="1h" onclick="setTimeFocus('1h',this)">1H</button>
+        </div>
+        <select class="sort-select" id="sortMode" onchange="renderTable()">
+          <option value="chg1h_abs">排序：1H 異動</option>
+          <option value="chg30m_abs">排序：30M 異動</option>
+          <option value="chg5m_abs">排序：5M 異動</option>
+          <option value="oi">排序：OI 總量</option>
+          <option value="fr_abs">排序：資金費率</option>
+        </select>
+        <select class="sort-select" id="filterMode" onchange="renderTable()">
+          <option value="all">全部幣種</option>
+          <option value="up">OI 上升</option>
+          <option value="down">OI 下降</option>
+          <option value="diverge">背離訊號</option>
+          <option value="fr_extreme">FR 極端</option>
+        </select>
+        <input class="filter-input" id="symSearch" placeholder="搜尋幣種..." oninput="renderTable()">
+        <div class="refresh-info">
+          <div id="nextRefresh">下次刷新：—</div>
+          <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        </div>
+      </div>
+
+      <!-- Summary strip -->
+      <div class="stat-strip" id="statStrip">
+        <div class="stat-item"><div class="stat-key">監控幣種</div><div class="stat-val" id="s-count">—</div></div>
+        <div class="stat-item"><div class="stat-key">總 OI (億 USD)</div><div class="stat-val" id="s-oi">—</div></div>
+        <div class="stat-item"><div class="stat-key">OI↑ / OI↓</div><div class="stat-val" id="s-updown">—</div></div>
+        <div class="stat-item"><div class="stat-key">平均資金費率</div><div class="stat-val" id="s-fr">—</div></div>
+        <div class="stat-item"><div class="stat-key">警報 (本次)</div><div class="stat-val" id="s-alerts" style="color:var(--amber)">0</div></div>
+      </div>
+
+      <!-- Alert feed -->
+      <div class="alert-feed" id="alertFeed"></div>
+
+      <!-- Table -->
+      <div class="table-wrap">
+        <table>
+          <colgroup>
+            <col class="c-rank"><col class="c-sym"><col class="c-price">
+            <col class="c-oi"><col class="c-5m"><col class="c-30m">
+            <col class="c-1h"><col class="c-fr"><col class="c-div"><col class="c-spark">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>幣種</th>
+              <th class="r" onclick="setSortDirect('price')">價格</th>
+              <th class="r" onclick="setSortDirect('oi')">OI (億)</th>
+              <th class="r" onclick="setSortDirect('chg5m_abs')" id="th5m">5M %</th>
+              <th class="r" onclick="setSortDirect('chg30m_abs')" id="th30m">30M %</th>
+              <th class="r" onclick="setSortDirect('chg1h_abs')" id="th1h">1H %</th>
+              <th class="r" onclick="setSortDirect('fr_abs')">資金費率</th>
+              <th class="r">背離</th>
+              <th>走勢</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <tr class="loading-row"><td colspan="10">尚未啟動 — 點擊「開始監控」</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal (mobile) -->
+<div class="modal-overlay" id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div class="modal">
+    <h2>設定 / Settings</h2>
+    <p style="font-size:12px;color:var(--muted);">請在左側側欄進行設定。此彈窗適用於行動裝置。</p>
+    <div style="margin-top:16px;"><button class="btn" onclick="closeSettings()">關閉</button></div>
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────
+let data = [];
+let alertLog = [];
+let alertCount = 0;
+let fetchTimer = null;
+let progressTimer = null;
+let countdownTimer = null;
+let nextFetchAt = 0;
+let timeFocus = 'all';
+let alreadyAlerted = new Set(); // prevent repeat alerts within same fetch cycle
+
+// ─── Formatters ──────────────────────────────────────────
+const fmt = {
+  price: (v) => {
+    if (!v) return '—';
+    if (v >= 1000) return '$' + v.toLocaleString('en', {maximumFractionDigits:0});
+    if (v >= 1) return '$' + v.toFixed(2);
+    return '$' + v.toFixed(4);
+  },
+  oi: (v) => {
+    const b = v / 1e8;
+    if (b >= 1) return b.toFixed(2);
+    return (v / 1e6).toFixed(1) + 'M';
+  },
+  chg: (v) => {
+    if (v === 0 || v === undefined) return '<span class="chg flat">±0.000</span>';
+    const s = (v > 0 ? '+' : '') + v.toFixed(3) + '%';
+    const cls = v > 0 ? 'up' : 'dn';
+    return `<span class="chg ${cls}">${s}</span>`;
+  },
+  fr: (v) => {
+    const pct = (v * 100).toFixed(4) + '%';
+    const sign = v > 0 ? '+' : '';
+    const cls = Math.abs(v * 100) >= parseFloat(document.getElementById('threshFR').value || 0.05)
+      ? (v > 0 ? 'pos extreme' : 'neg extreme')
+      : (v > 0 ? 'pos' : 'neg');
+    return `<span class="fr ${cls}">${sign}${pct}</span>`;
+  },
+  time: () => {
+    const d = new Date();
+    return d.toTimeString().slice(0,8);
+  }
+};
+
+// ─── Fetch ───────────────────────────────────────────────
+async function fetchData() {
+  const cgKey = document.getElementById('cgKey').value.trim();
+  const symbols = document.getElementById('symbolsInput').value
+    .split(',').map(s => s.trim().toUpperCase()).filter(Boolean).join(',');
+
+  let url = `/api/oi?symbols=${symbols}`;
+  if (cgKey) url += `&coinglassKey=${encodeURIComponent(cgKey)}`;
+
+  document.getElementById('statusText').textContent = '● FETCHING';
+  document.getElementById('statusText').style.color = 'var(--amber)';
+
+  try {
+    const res = await fetch(url);
+    const json = await res.json();
+    if (!json.ok) throw new Error('API error');
+
+    data = json.data;
+    document.getElementById('fetchedAt').textContent = fmt.time();
+    document.getElementById('statusText').textContent = '● LIVE';
+    document.getElementById('statusText').style.color = 'var(--green)';
+
+    alreadyAlerted = new Set(); // reset per-cycle dedup
+    checkAlerts(data);
+    renderStats(data);
+    renderTable();
+  } catch (err) {
+    document.getElementById('statusText').textContent = '● ERROR';
+    document.getElementById('statusText').style.color = 'var(--red)';
+    console.error(err);
+  }
+}
+
+// ─── Alert Logic ─────────────────────────────────────────
+function checkAlerts(rows) {
+  const rule5m = document.getElementById('rule5m').checked;
+  const rule1h = document.getElementById('rule1h').checked;
+  const ruleFR = document.getElementById('ruleFR').checked;
+  const ruleDivergence = document.getElementById('ruleDivergence').checked;
+  const thresh5m = parseFloat(document.getElementById('thresh5m').value || 2);
+  const thresh1h = parseFloat(document.getElementById('thresh1h').value || 5);
+  const threshFR = parseFloat(document.getElementById('threshFR').value || 0.05) / 100;
+
+  const triggered = [];
+
+  for (const row of rows) {
+    const key5m = `5m_${row.symbol}`;
+    const key1h = `1h_${row.symbol}`;
+    const keyFR = `fr_${row.symbol}`;
+    const keyDiv = `div_${row.symbol}`;
+
+    if (rule5m && Math.abs(row.chg5m) >= thresh5m && !alreadyAlerted.has(key5m)) {
+      alreadyAlerted.add(key5m);
+      const dir = row.chg5m > 0 ? '🟢 暴增' : '🔴 暴跌';
+      triggered.push({
+        icon: row.chg5m > 0 ? 'var(--green)' : 'var(--red)',
+        sym: row.symbol,
+        msg: `OI 5分鐘 ${dir} ${row.chg5m > 0 ? '+' : ''}${row.chg5m.toFixed(2)}%`,
+        tg: `⚡ <b>${row.symbol}</b> OI 5分鐘${dir} <b>${row.chg5m > 0 ? '+' : ''}${row.chg5m.toFixed(2)}%</b>\n💰 OI: $${fmt.oi(row.oiUsd)}億\n💵 價格: ${fmt.price(row.price)}`
+      });
+    }
+
+    if (rule1h && Math.abs(row.chg1h) >= thresh1h && !alreadyAlerted.has(key1h)) {
+      alreadyAlerted.add(key1h);
+      const dir = row.chg1h > 0 ? '📈 持續增倉' : '📉 持續減倉';
+      triggered.push({
+        icon: row.chg1h > 0 ? 'var(--green)' : 'var(--red)',
+        sym: row.symbol,
+        msg: `OI 1小時累積 ${dir} ${row.chg1h > 0 ? '+' : ''}${row.chg1h.toFixed(2)}%`,
+        tg: `📊 <b>${row.symbol}</b> OI 1小時${dir}\n變化: <b>${row.chg1h > 0 ? '+' : ''}${row.chg1h.toFixed(2)}%</b>\n💰 OI: $${fmt.oi(row.oiUsd)}億\n💵 價格: ${fmt.price(row.price)}`
+      });
+    }
+
+    if (ruleFR && Math.abs(row.fundingRate) >= threshFR && !alreadyAlerted.has(keyFR)) {
+      alreadyAlerted.add(keyFR);
+      const dir = row.fundingRate > 0 ? '🟢 極端偏多' : '🔴 極端偏空';
+      const frPct = (row.fundingRate * 100).toFixed(4);
+      triggered.push({
+        icon: row.fundingRate > 0 ? 'var(--amber)' : 'var(--amber)',
+        sym: row.symbol,
+        msg: `資金費率 ${dir} ${row.fundingRate > 0 ? '+' : ''}${frPct}%`,
+        tg: `💸 <b>${row.symbol}</b> 資金費率${dir}\nFR: <b>${row.fundingRate > 0 ? '+' : ''}${frPct}%</b>\n💵 價格: ${fmt.price(row.price)}`
+      });
+    }
+
+    if (ruleDivergence && !alreadyAlerted.has(keyDiv)) {
+      // Divergence: OI up + price change opposite direction
+      // We approximate price change direction from chg1h and OI chg1h
+      // True divergence needs price history — we approximate:
+      // If OI 1H strong up (>2%) but 30M OI has reversed (chg30m < -1%), that's a divergence signal
+      const oiUp = row.chg1h > 2;
+      const oiDn = row.chg1h < -2;
+      const priceDn = row.chg30m < -1 && row.chg1h > 1; // OI rising but short-term reverting
+      const priceUp = row.chg30m > 1 && row.chg1h < -1;
+
+      if ((oiUp && priceDn) || (oiDn && priceUp)) {
+        alreadyAlerted.add(keyDiv);
+        const label = oiUp && priceDn ? '🔶 OI↑ 但短線回落' : '🔷 OI↓ 但短線反彈';
+        triggered.push({
+          icon: 'var(--amber)',
+          sym: row.symbol,
+          msg: `背離訊號 ${label}（OI 1H ${row.chg1h > 0 ? '+' : ''}${row.chg1h.toFixed(2)}%）`,
+          tg: `🔔 <b>${row.symbol}</b> 背離訊號\n${label}\nOI 1H: <b>${row.chg1h > 0 ? '+' : ''}${row.chg1h.toFixed(2)}%</b>\nOI 30M: <b>${row.chg30m > 0 ? '+' : ''}${row.chg30m.toFixed(2)}%</b>\n💵 價格: ${fmt.price(row.price)}`
+        });
+      }
+    }
+  }
+
+  if (triggered.length > 0) {
+    alertCount += triggered.length;
+    document.getElementById('s-alerts').textContent = alertCount;
+    addAlertFeedItems(triggered);
+    sendTelegramAlerts(triggered);
+  }
+}
+
+function addAlertFeedItems(items) {
+  const feed = document.getElementById('alertFeed');
+  for (const item of items) {
+    const el = document.createElement('div');
+    el.className = 'alert-item';
+    el.innerHTML = `
+      <div class="alert-icon" style="background:${item.icon}"></div>
+      <span class="alert-sym">${item.sym}</span>
+      <span class="alert-msg">${item.msg}</span>
+      <span class="alert-time">${fmt.time()}</span>`;
+    feed.prepend(el);
+    // keep max 20 items
+    while (feed.children.length > 20) feed.removeChild(feed.lastChild);
+  }
+}
+
+async function sendTelegramAlerts(items) {
+  const token = document.getElementById('tgToken').value.trim();
+  const chatId = document.getElementById('tgChatId').value.trim();
+  if (!token || !chatId) return;
+
+  const batchMsg = '🚨 <b>OI Monitor 警報</b>\n' + fmt.time() + '\n\n'
+    + items.map(i => i.tg).join('\n\n─────────────\n\n');
+
+  try {
+    await fetch('/api/alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ botToken: token, chatId, message: batchMsg })
+    });
+  } catch (e) { console.error('TG send failed', e); }
+}
+
+async function testTelegram() {
+  const token = document.getElementById('tgToken').value.trim();
+  const chatId = document.getElementById('tgChatId').value.trim();
+  const resultEl = document.getElementById('tgTestResult');
+
+  if (!token || !chatId) {
+    resultEl.innerHTML = '<div class="test-result err">請先填入 Bot Token 和 Chat ID</div>';
+    return;
+  }
+
+  resultEl.innerHTML = '<div class="test-result">發送中...</div>';
+
+  try {
+    const res = await fetch('/api/alert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        botToken: token,
+        chatId,
+        message: '✅ <b>OI Monitor 連線成功</b>\n\n監控系統已就緒，警報將即時推送至此頻道。\n\n⏰ ' + new Date().toLocaleString('zh-TW')
+      })
+    });
+    const json = await res.json();
+    if (json.ok) {
+      resultEl.innerHTML = '<div class="test-result ok">✓ 發送成功！請檢查 Telegram</div>';
+    } else {
+      resultEl.innerHTML = `<div class="test-result err">✗ ${json.error}</div>`;
+    }
+  } catch (e) {
+    resultEl.innerHTML = `<div class="test-result err">✗ 網路錯誤：${e.message}</div>`;
+  }
+}
+
+// ─── Render Stats ─────────────────────────────────────────
+function renderStats(rows) {
+  const totalOI = rows.reduce((s,r) => s + r.oiUsd, 0);
+  const up = rows.filter(r => r.chg1h > 0).length;
+  const dn = rows.filter(r => r.chg1h < 0).length;
+  const avgFR = rows.reduce((s,r) => s + r.fundingRate, 0) / rows.length;
+  const frPct = (avgFR * 100).toFixed(4);
+
+  document.getElementById('s-count').textContent = rows.length;
+  document.getElementById('s-oi').textContent = (totalOI / 1e8).toFixed(1);
+  document.getElementById('s-updown').innerHTML =
+    `<span style="color:var(--green)">${up}↑</span> <span style="color:var(--muted)">/</span> <span style="color:var(--red)">${dn}↓</span>`;
+  document.getElementById('s-fr').innerHTML =
+    `<span style="color:${avgFR > 0 ? 'var(--green)' : 'var(--red)'}">${avgFR > 0 ? '+' : ''}${frPct}%</span>`;
+}
+
+// ─── Render Table ─────────────────────────────────────────
+function renderTable() {
+  const sortMode = document.getElementById('sortMode').value;
+  const filterMode = document.getElementById('filterMode').value;
+  const search = document.getElementById('symSearch').value.toUpperCase();
+  const threshFR = parseFloat(document.getElementById('threshFR').value || 0.05) / 100;
+
+  let rows = [...data];
+
+  // Filter
+  if (search) rows = rows.filter(r => r.symbol.includes(search));
+  if (filterMode === 'up') rows = rows.filter(r => r.chg1h > 0);
+  if (filterMode === 'down') rows = rows.filter(r => r.chg1h < 0);
+  if (filterMode === 'fr_extreme') rows = rows.filter(r => Math.abs(r.fundingRate) >= threshFR);
+  if (filterMode === 'diverge') {
+    rows = rows.filter(r =>
+      (r.chg1h > 2 && r.chg30m < -1) || (r.chg1h < -2 && r.chg30m > 1)
+    );
+  }
+
+  // Sort
+  const sortFn = {
+    chg1h_abs: (a,b) => Math.abs(b.chg1h) - Math.abs(a.chg1h),
+    chg30m_abs: (a,b) => Math.abs(b.chg30m) - Math.abs(a.chg30m),
+    chg5m_abs: (a,b) => Math.abs(b.chg5m) - Math.abs(a.chg5m),
+    oi: (a,b) => b.oiUsd - a.oiUsd,
+    fr_abs: (a,b) => Math.abs(b.fundingRate) - Math.abs(a.fundingRate),
+    price: (a,b) => b.price - a.price,
+  };
+  rows.sort(sortFn[sortMode] || sortFn.chg1h_abs);
+
+  const show5m  = timeFocus === 'all' || timeFocus === '5m';
+  const show30m = timeFocus === 'all' || timeFocus === '30m';
+  const show1h  = timeFocus === 'all' || timeFocus === '1h';
+
+  const tbody = document.getElementById('tableBody');
+  tbody.innerHTML = rows.map((r, i) => {
+    const oiUsd = r.oiUsd;
+    const div = detectDivergence(r);
+    const isAlert = Math.abs(r.chg1h) >= parseFloat(document.getElementById('thresh1h').value||5)
+                 || Math.abs(r.chg5m) >= parseFloat(document.getElementById('thresh5m').value||2);
+
+    return `<tr class="${isAlert ? 'alert-row' : ''}">
+      <td style="color:var(--muted);font-family:var(--font-mono);font-size:10px;">${i+1}</td>
+      <td>
+        <div class="sym-cell">
+          <span class="sym-text">${r.symbol}</span>
+          ${r.hasCG ? '<span class="cg-badge">CG</span>' : ''}
+        </div>
+      </td>
+      <td class="r price-cell">${fmt.price(r.price)}</td>
+      <td class="r oi-cell">${fmt.oi(oiUsd)}</td>
+      <td class="r">${show5m  ? fmt.chg(r.chg5m)  : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="r">${show30m ? fmt.chg(r.chg30m) : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="r">${show1h  ? fmt.chg(r.chg1h)  : '<span style="color:var(--muted)">—</span>'}</td>
+      <td class="r">${fmt.fr(r.fundingRate)}</td>
+      <td class="r">${div}</td>
+      <td class="spark-cell"><canvas class="spark" id="spark_${r.symbol}" width="80" height="28"></canvas></td>
+    </tr>`;
+  }).join('') || '<tr class="loading-row"><td colspan="10">沒有符合條件的資料</td></tr>';
+
+  // Draw sparklines
+  requestAnimationFrame(() => {
+    rows.forEach(r => {
+      const canvas = document.getElementById(`spark_${r.symbol}`);
+      if (canvas && r.sparkline && r.sparkline.length > 1) drawSparkline(canvas, r.sparkline, r.chg1h);
+    });
+  });
+}
+
+function detectDivergence(r) {
+  const oiUp = r.chg1h > 2;
+  const oiDn = r.chg1h < -2;
+  const shortDn = r.chg30m < -1;
+  const shortUp = r.chg30m > 1;
+
+  if (oiUp && shortDn) return '<span class="div-badge div-bear">OI↑P↓</span>';
+  if (oiDn && shortUp) return '<span class="div-badge div-bull">OI↓P↑</span>';
+  return '<span style="color:var(--muted);font-size:10px;">—</span>';
+}
+
+function drawSparkline(canvas, data, chg) {
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0, 0, w, h);
+
+  const mn = Math.min(...data), mx = Math.max(...data);
+  const range = mx - mn || 1;
+  const pts = data.map((v, i) => ({
+    x: (i / (data.length - 1)) * (w - 2) + 1,
+    y: h - 2 - ((v - mn) / range) * (h - 4)
+  }));
+
+  const color = chg >= 0 ? '#22c55e' : '#ef4444';
+  ctx.beginPath();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.stroke();
+
+  // Fill
+  ctx.beginPath();
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+  ctx.lineTo(pts[pts.length-1].x, h);
+  ctx.lineTo(pts[0].x, h);
+  ctx.closePath();
+  ctx.fillStyle = chg >= 0 ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)';
+  ctx.fill();
+}
+
+// ─── Controls ─────────────────────────────────────────────
+function setTimeFocus(tf, el) {
+  timeFocus = tf;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderTable();
+}
+
+function setSortDirect(mode) {
+  document.getElementById('sortMode').value = mode;
+  renderTable();
+}
+
+function startFetch() {
+  if (fetchTimer) clearInterval(fetchTimer);
+  if (progressTimer) clearInterval(progressTimer);
+  if (countdownTimer) clearInterval(countdownTimer);
+
+  const interval = parseInt(document.getElementById('refreshInterval').value || 60) * 1000;
+  alertCount = 0;
+  document.getElementById('s-alerts').textContent = '0';
+
+  fetchData();
+
+  fetchTimer = setInterval(() => { fetchData(); }, interval);
+
+  // Progress bar + countdown
+  function startCountdown() {
+    nextFetchAt = Date.now() + interval;
+    progressTimer = setInterval(() => {
+      const remaining = Math.max(0, nextFetchAt - Date.now());
+      const pct = ((interval - remaining) / interval) * 100;
+      document.getElementById('progressFill').style.width = pct + '%';
+      const secs = Math.ceil(remaining / 1000);
+      document.getElementById('nextRefresh').textContent = `下次刷新：${secs}s`;
+      if (remaining <= 0) clearInterval(progressTimer);
+    }, 500);
+  }
+  startCountdown();
+  setInterval(startCountdown, interval);
+}
+
+function openSettings() { document.getElementById('settingsModal').classList.add('open'); }
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+
+// ─── Init ─────────────────────────────────────────────────
+// Persist settings in localStorage
+window.addEventListener('load', () => {
+  ['cgKey','tgToken','tgChatId','symbolsInput','refreshInterval','thresh5m','thresh1h','threshFR'].forEach(id => {
+    const saved = localStorage.getItem('oi_' + id);
+    if (saved) document.getElementById(id).value = saved;
+    document.getElementById(id).addEventListener('input', () => {
+      localStorage.setItem('oi_' + id, document.getElementById(id).value);
+    });
+  });
+  ['rule5m','rule1h','ruleFR','ruleDivergence'].forEach(id => {
+    const saved = localStorage.getItem('oi_' + id);
+    if (saved !== null) document.getElementById(id).checked = saved === 'true';
+    document.getElementById(id).addEventListener('change', () => {
+      localStorage.setItem('oi_' + id, document.getElementById(id).checked);
+    });
+  });
+});
+</script>
+</body>
+</html>
